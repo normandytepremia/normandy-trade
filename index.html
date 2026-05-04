@@ -505,7 +505,7 @@ function renderGroups(){
   var wrName='',wrPct=999,wrGrp='';
   for(var g2 in groups){ var rts=getRoutes(groups[g2]); for(var rt in rts){ var rs=groupStats(rts[rt]); if(rs.p<wrPct&&rs.mt>0){wrPct=rs.p;wrName=rt;wrGrp=g2;} } }
   var ah='';
-  if(!hasVenta) ah='<div class="alert-banner info"><div class="alert-icon">&#128197;</div><div class="alert-text"><strong>Sin datos de venta cargados</strong>Carga el archivo de venta del dia desde el panel de administrador para ver el avance real.</div></div>';
+  if(!hasVenta) ah='<div class="alert-banner info"><div class="alert-icon">&#8987;</div><div class="alert-text"><strong>Cargando datos de venta...</strong>Los datos se estan cargando desde Google Sheets. Si esto persiste, verifica la conexion.</div></div>';
   else {
     if(worstGp<70) ah+='<div class="alert-banner danger"><div class="alert-icon">&#9888;</div><div class="alert-text"><strong>Grupo con bajo desempeno: '+worstG+'</strong>Esta al '+worstGp+'% de la meta semanal.</div></div>';
     if(wrPct<60) ah+='<div class="alert-banner warn"><div class="alert-icon">&#128201;</div><div class="alert-text"><strong>Ruta mas rezagada: '+wrName+' ('+wrGrp+')</strong>Al '+wrPct+'% de la meta semanal.</div></div>';
@@ -670,31 +670,36 @@ function closeLightbox(){ document.getElementById('lightbox').classList.remove('
 // ===== INIT =====
 function loadFromSheets(){
   var statusEl = document.getElementById('sheets-status');
-  if(statusEl) statusEl.textContent = 'Cargando datos...';
-  fetch(SHEETS_VENTAS_URL)
+  if(statusEl) statusEl.textContent = 'Cargando...';
+  var url = SHEETS_VENTAS_URL + '&nocache=' + Date.now();
+  fetch(url)
     .then(function(r){ return r.text(); })
     .then(function(text){
-      // Auto-detect separator
-      var sep = (text.indexOf(';') > text.indexOf(',') && text.split(';').length > text.split(',').length) ? ';' : ',';
+      if(!text||text.length<10) throw new Error('vacio');
+      var firstLine = text.split('\n')[0];
+      var sep = (firstLine.split(';').length > firstLine.split(',').length) ? ';' : ',';
       var result = Papa.parse(text, {header:true, skipEmptyLines:true, delimiter:sep});
-      var rows = result.data;
       VMAP = {};
-      rows.forEach(function(r){
+      var loaded = 0;
+      result.data.forEach(function(r){
         var k = Object.keys(r);
         var cod = (r['Cod. Cliente']||r['Cliente']||r[k[2]]||'').toString().trim();
         var venta = parseCOP(r['Venta']||r[k[4]]);
-        var averias = parsePCT(r['% Averias']||r['% Averías']||r[k[5]]);
-        if(cod) VMAP[cod] = {cod:cod, venta:venta, averias:averias};
+        var averias = parsePCT(r['% Averias']||r['% Averias']||r[k[5]]);
+        if(cod){ VMAP[cod]={cod:cod,venta:venta,averias:averias}; loaded++; }
       });
       var now = new Date();
       var months=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-      document.getElementById('topbar-date').textContent = months[now.getMonth()] + ' ' + now.getFullYear();
-      if(statusEl) { statusEl.textContent = 'Datos actualizados ' + now.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}); statusEl.style.color='var(--green)'; }
+      document.getElementById('topbar-date').textContent=months[now.getMonth()]+' '+now.getFullYear();
+      if(statusEl){
+        statusEl.textContent=loaded+' clientes '+now.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+        statusEl.style.color='var(--green)';
+      }
       renderGroups();
     })
     .catch(function(err){
-      console.warn('No se pudo cargar desde Sheets:', err);
-      if(statusEl) { statusEl.textContent = 'Sin conexion — mostrando metas'; statusEl.style.color='var(--orange)'; }
+      console.warn('Sheets error:', err);
+      if(statusEl){ statusEl.textContent='Sin venta'; statusEl.style.color='rgba(255,255,255,.5)'; }
       renderGroups();
     });
 }
