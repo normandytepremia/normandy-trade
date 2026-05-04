@@ -540,7 +540,7 @@ function loadGanadores(){
           var card=document.createElement('div');card.className='ganador-card';
           var murl=driveLink(g.MediaURL||'');
           var mediaHtml=murl
-            ?'<img class="ganador-img" src="'+murl+'" alt="evidencia" onclick="openLightbox(this.src)" onerror="this.style.display='none'">'
+            ?'<img class="ganador-img" src="'+murl+'" alt="evidencia" onclick="openLightbox(this.src)" onerror="this.remove()">'
             :'<div class="ganador-no-media">&#128247; Sin evidencia adjunta</div>';
           card.innerHTML=
             '<div class="ganador-top"><div><div class="ganador-nombre">&#127942; '+(g.Nombre||'')+'</div><div class="ganador-meta">Ruta: '+(g.Ruta||'')+(g.Fecha?' &middot; '+g.Fecha:'')+'</div></div><div class="ganador-badge">'+(g.Premio||'')+'</div></div>'+
