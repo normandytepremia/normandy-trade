@@ -332,6 +332,15 @@ var GROUP_COLORS = {A_TAT:'#0057b7', P_MZL:'#0f6e56', P_PER:'#7c3aed'};
 var ADMIN_PWD = 'normandy2025';
 // Google Sheets CSV URL for ventas (update this when you change the sheet)
 var SHEETS_VENTAS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSlmgIrzAbF7VXwEVvo0uvIL5i9GKquknuBm0hfQS4Ta_yx9QNcMwCw4UFfwAUFgsYU-uj_LvH8J1YV/pub?gid=0&single=true&output=csv';
+// Apps Script URL for ganadores read/write
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby6tdBjfS2eg-ENYSqyRbYexj_7gGgwBPIYs2T2SZy6Hd82E3e3XTV8n_LaJXh0k8acKQ/exec';
+// Helper: convert Google Drive share link to direct view link
+function driveLink(url){
+  if(!url) return '';
+  var m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if(m) return 'https://drive.google.com/uc?export=view&id='+m[1];
+  return url;
+}
 
 function fmtK(n){ n=n||0; if(Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(1)+'M'; if(Math.abs(n)>=1e3) return '$'+(n/1e3).toFixed(0)+'K'; return '$'+Math.round(n); }
 function pct(a,b){ return b>0?Math.round(a/b*100):0; }
@@ -469,6 +478,7 @@ function switchTab(idx){
   document.getElementById('page-seg').style.display = idx===0?'block':'none';
   document.getElementById('page-gan').style.display = idx===1?'block':'none';
   document.getElementById('breadcrumb-bar').style.display = idx===0?'flex':'none';
+  if(idx===1) loadGanadores();
 }
 
 // ===== BREADCRUMB =====
@@ -609,22 +619,51 @@ function goBack(to){
 }
 
 // ===== GANADORES =====
-function renderGanadores(){
-  var grid=document.getElementById('ganadores-grid'); grid.innerHTML='';
-  if(!ganadores.length){ grid.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3);font-size:14px;">Aun no hay ganadores registrados.</div>'; return; }
-  ganadores.forEach(function(g){
+function loadGanadores(){
+  var grid=document.getElementById('ganadores-grid');
+  grid.innerHTML='<div style="text-align:center;padding:24px;color:var(--text3);font-size:14px;">&#8635; Cargando ganadores...</div>';
+  fetch(APPS_SCRIPT_URL+'?action=read')
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res.ok && res.data && res.data.length){
+        renderGanadoresData(res.data);
+      } else {
+        grid.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3);font-size:14px;">Aun no hay ganadores registrados.</div>';
+      }
+    })
+    .catch(function(){
+      grid.innerHTML='<div style="text-align:center;padding:32px;color:var(--text3);font-size:14px;">No se pudieron cargar los ganadores.</div>';
+    });
+}
+
+function renderGanadoresData(data){
+  var grid=document.getElementById('ganadores-grid');
+  grid.innerHTML='';
+  data.forEach(function(g){
     var card=document.createElement('div'); card.className='ganador-card';
-    var mediaHtml=g.mediaUrl
-      ?(g.mediaType&&g.mediaType.indexOf('video')>-1?'<video class="ganador-video" controls><source src="'+g.mediaUrl+'"></video>':'<img class="ganador-img" src="'+g.mediaUrl+'" alt="evidencia" onclick="openLightbox(this.src)">')
+    var mediaUrl=driveLink(g.MediaURL||g.mediaUrl||'');
+    var fecha=g.Fecha||g.fecha||'';
+    var mediaHtml=mediaUrl
+      ?'<img class="ganador-img" src="'+mediaUrl+'" alt="evidencia" onclick="openLightbox(this.src)" onerror="this.parentElement.innerHTML='<div class=ganador-no-media>&#128247; No se pudo cargar la imagen</div>'">'
       :'<div class="ganador-no-media">&#128247; Sin evidencia adjunta</div>';
-    card.innerHTML='<div class="ganador-top"><div><div class="ganador-nombre">&#127942; '+g.nombre+'</div><div class="ganador-meta">Ruta: '+g.ruta+'</div></div><div class="ganador-badge">'+g.premio+'</div></div><div class="ganador-media"><div class="ganador-media-label">Evidencia de entrega</div>'+mediaHtml+'</div>';
+    card.innerHTML=
+      '<div class="ganador-top">'+
+        '<div>'+
+          '<div class="ganador-nombre">&#127942; '+(g.Nombre||g.nombre||'')+'</div>'+
+          '<div class="ganador-meta">Ruta: '+(g.Ruta||g.ruta||'')+(fecha?' &middot; '+fecha:'')+'</div>'+
+        '</div>'+
+        '<div class="ganador-badge">'+(g.Premio||g.premio||'')+'</div>'+
+      '</div>'+
+      '<div class="ganador-media"><div class="ganador-media-label">Evidencia de entrega</div>'+mediaHtml+'</div>';
     grid.appendChild(card);
   });
 }
-function openGanadorModal(){ document.getElementById('m-nombre').value=''; document.getElementById('m-ruta').value=''; document.getElementById('m-premio').value=''; document.getElementById('m-file').value=''; document.getElementById('m-preview').style.display='none'; document.getElementById('modal-gan').classList.add('open'); }
+
+function renderGanadores(){ loadGanadores(); }
+function openGanadorModal(){ document.getElementById('modal-gan').classList.add('open'); }
 function closeGanadorModal(){ document.getElementById('modal-gan').classList.remove('open'); }
-function previewMedia(){ var f=document.getElementById('m-file').files[0]; if(!f||!f.type.startsWith('image'))return; var r=new FileReader(); r.onload=function(e){ var p=document.getElementById('m-preview'); p.src=e.target.result; p.style.display='block'; }; r.readAsDataURL(f); }
-function saveGanador(){ var n=document.getElementById('m-nombre').value.trim(),ru=document.getElementById('m-ruta').value.trim(),pr=document.getElementById('m-premio').value.trim(); if(!n||!ru||!pr){alert('Completa nombre, ruta y premio.');return;} var f=document.getElementById('m-file').files[0],obj={nombre:n,ruta:ru,premio:pr,mediaUrl:null,mediaType:null}; if(f){var rd=new FileReader();rd.onload=function(e){obj.mediaUrl=e.target.result;obj.mediaType=f.type;ganadores.push(obj);renderGanadores();closeGanadorModal();};rd.readAsDataURL(f);}else{ganadores.push(obj);renderGanadores();closeGanadorModal();} }
+function previewMedia(){}
+function saveGanador(){ alert('Para agregar ganadores, edita directamente la hoja Ganadores en Google Sheets.'); closeGanadorModal(); }
 function openLightbox(src){ document.getElementById('lightbox-img').src=src; document.getElementById('lightbox').classList.add('open'); }
 function closeLightbox(){ document.getElementById('lightbox').classList.remove('open'); }
 
@@ -662,7 +701,7 @@ function loadFromSheets(){
 
 renderGroups();
 loadFromSheets();
-renderGanadores();
+loadGanadores();
 </script>
 </body>
 </html>
