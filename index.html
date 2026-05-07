@@ -450,7 +450,7 @@ function loadFromSheets(){
       res.data.forEach(function(r){
         var k=Object.keys(r);
         var cod=(r['Cod. Cliente']||r['Cliente']||r[k[2]]||'').toString().trim();
-        var venta=parseCOP(r['Venta Entera']||r['Venta']||r[k[6]]||r[k[4]]);
+        var venta=parseCOP(r['Venta']||r[k[4]]);
         var averias=parsePCT(r['% Averias']||r['% Averías']||r[k[5]]);
         if(cod){VMAP[cod]={cod:cod,venta:venta,averias:averias};loaded++;}
       });
