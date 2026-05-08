@@ -398,7 +398,7 @@ function getGroups(){ var g={}; METAS.forEach(function(m){ if(!g[m.grupo])g[m.gr
 function getRoutes(rows){ var r={}; rows.forEach(function(m){ if(!r[m.vendedor])r[m.vendedor]=[]; r[m.vendedor].push(m); }); return r; }
 function groupStats(rows){ var mt=0,vt=0,ok=0,prom=0; rows.forEach(function(r){ var v=VMAP[r.cod]||{}; mt+=r.meta_men; vt+=(v.venta||0); prom+=(r.promedio||0); if((v.venta||0)>=r.meta_men&&r.meta_men>0)ok++; }); return{mt:mt,vt:vt,ok:ok,n:rows.length,p:pct(vt,mt),prom:prom}; }
 
-function parseCOP(s){ s=(s||'').toString().trim().replace(/[$]/g,'').replace(/\s/g,'').replace(/\./g,'').replace(/-/g,'').replace(/,/g,'.'); var n=parseFloat(s); return isNaN(n)?0:Math.round(n); }
+function parseCOP(s){ s=(s||'').toString().trim(); var neg=s.indexOf('-')>-1; s=s.replace(/[$\-]/g,'').replace(/\s/g,'').replace(/\./g,'').replace(/,/g,'.'); var n=parseFloat(s); n=isNaN(n)?0:Math.round(n); return neg?-n:n; }
 function parsePCT(s){ s=(s||'').toString().trim().replace(/%/g,'').replace(/,/g,'.').replace(/\s/g,''); var n=parseFloat(s); return isNaN(n)?0:n; }
 function driveLink(url){ if(!url)return ''; var m=url.match(/\/d\/([a-zA-Z0-9_-]+)/); if(m)return 'https://drive.google.com/uc?export=view&id='+m[1]; return url; }
 function youtubeEmbed(url){
