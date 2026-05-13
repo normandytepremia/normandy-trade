@@ -347,9 +347,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="rules-step"><div class="rules-step-num">3</div><div class="rules-step-text">Las rifas <strong>jugaran a partir del segundo miercoles del mes siguiente</strong> con la loteria de Manizales.</div></div>
       <div class="rules-step"><div class="rules-step-num">4</div><div class="rules-step-text"><strong>Se haran 3 rifas al mes.</strong> El segundo, tercero y cuarto miercoles de cada mes.</div></div>
       <div class="rules-step"><div class="rules-step-num warn">5</div><div class="rules-step-text">Las ventas del cliente durante el mes deben <strong>incrementarse un 20% frente al promedio de venta de los ultimos 3 meses.</strong></div></div>
-      <div class="rules-step"><div class="rules-step-num warn">6</div><div class="rules-step-text">Solo se consideran ventas en <strong>productos industria y Marca propia.</strong></div></div>
+      <div class="rules-step"><div class="rules-step-num warn">6</div><div class="rules-step-text">Solo se consideran ventas en <strong>Productos Marca Normandy.</strong></div></div>
       <div class="rules-step"><div class="rules-step-num warn">7</div><div class="rules-step-text">En la primera semana del mes siguiente las averias del cliente deben ser <strong>menores o iguales al 3.5%.</strong></div></div>
-      <div class="rules-step"><div class="rules-step-num">8</div><div class="rules-step-text">El bono sera redimible en <strong>productos industria y marca propia.</strong></div></div>
+      <div class="rules-step"><div class="rules-step-num">8</div><div class="rules-step-text">El bono sera redimible en <strong>Productos Marca Normandy.</strong></div></div>
       <div class="rules-step"><div class="rules-step-num">9</div><div class="rules-step-text">El valor del bono sera igual al promedio de ventas semanal del cliente ganador. <strong>Maximo de $200.000.</strong></div></div>
     </div>
     <div class="rules-section-title">Tiempos para la siguiente rifa</div>
@@ -392,6 +392,58 @@ var MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto',
 
 function fmtK(n){ n=n||0; return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n); }
 function pct(a,b){ return b>0?Math.round(a/b*100):0; }
+
+// Calcular días hábiles transcurridos y totales del mes según tipo de grupo
+// A_ = Lunes a Viernes | P_ = Lunes a Sábado (festivos cuentan siempre)
+function calcWorkdays(grupo){
+  var now = new Date();
+  var y = now.getFullYear(), m = now.getMonth();
+  // Día vencido = ayer
+  var yesterday = new Date(y, m, now.getDate() - 1);
+  var isPrevent = (grupo||'').toString().toUpperCase().startsWith('P_');
+  function isWorkday(d){
+    var dow = d.getDay(); // 0=Dom,1=Lun,...,6=Sab
+    if(isPrevent) return dow>=1 && dow<=6; // Lun-Sab
+    return dow>=1 && dow<=5; // Lun-Vie
+  }
+  // Total días hábiles del mes
+  var totalDays = new Date(y, m+1, 0).getDate();
+  var total = 0;
+  for(var d=1; d<=totalDays; d++){
+    if(isWorkday(new Date(y,m,d))) total++;
+  }
+  // Días hábiles transcurridos hasta ayer (inclusive)
+  var elapsed = 0;
+  var lastDay = yesterday.getDate();
+  // Si ayer es del mes anterior, usar día 0
+  if(yesterday.getMonth() !== m) lastDay = 0;
+  for(var d2=1; d2<=lastDay; d2++){
+    if(isWorkday(new Date(y,m,d2))) elapsed++;
+  }
+  var avanceMes = total>0 ? Math.round(elapsed/total*100) : 0;
+  return {total:total, elapsed:elapsed, avanceMes:avanceMes};
+}
+
+// Cache de avance del mes por grupo (calculado una vez)
+var WD_CACHE = {};
+function getWD(grupo){
+  if(!WD_CACHE[grupo]) WD_CACHE[grupo] = calcWorkdays(grupo);
+  return WD_CACHE[grupo];
+}
+
+// Semáforo: verde si cumplimiento >= avanceMes, amarillo si está hasta 10pts abajo, rojo si más de 10pts abajo
+function colorForPace(cumpl, avanceMes){
+  if(cumpl >= avanceMes) return '#059669';           // verde
+  if(cumpl >= avanceMes - 10) return '#d97706';      // amarillo
+  return '#dc2626';                                   // rojo
+}
+function badgeClsPace(cumpl, avanceMes){
+  if(cumpl >= avanceMes) return 'badge-ok';
+  if(cumpl >= avanceMes - 10) return 'badge-warn';
+  return 'badge-danger';
+}
+
+// Funciones legacy (usadas donde no hay contexto de grupo)
 function badgeCls(p){ return p>=100?'badge-ok':p>=70?'badge-warn':'badge-danger'; }
 function colorFor(p){ return p>=100?'#059669':p>=70?'#d97706':'#dc2626'; }
 function getGroups(){ var g={}; METAS.forEach(function(m){ if(!g[m.grupo])g[m.grupo]=[]; g[m.grupo].push(m); }); return g; }
@@ -520,10 +572,17 @@ function renderGroups(){
   for(var g in groups){var s=groupStats(groups[g]);gStats[g]=s;totalC+=s.n;totalV+=s.vt;totalM+=s.mt;if(s.p<worstGp){worstGp=s.p;worstG=g;}}
   var gp=pct(totalV,totalM);
   var hasVenta=Object.keys(VMAP).length>0;
+
+  // Avance del mes: usar el primer grupo para referencia global (o calcular promedio)
+  // Mostramos el indicador global con el avance del mes del primer grupo
+  var firstG = Object.keys(groups)[0]||'A_TAT';
+  var wdGlobal = getWD(firstG);
+
   document.getElementById('summary-row').innerHTML=
-    '<div class="summary-card"><div class="summary-num" style="color:'+colorFor(gp)+'">'+gp+'%</div><div class="summary-lbl">Avance global</div><div class="summary-sub">'+fmtK(totalV)+' de '+fmtK(totalM)+'</div></div>'+
-    '<div class="summary-card"><div class="summary-num">'+Object.keys(groups).length+'</div><div class="summary-lbl">Grupos activos</div></div>'+
+    '<div class="summary-card"><div class="summary-num" style="color:'+colorForPace(gp, wdGlobal.avanceMes)+'">'+gp+'%</div><div class="summary-lbl">Avance global</div><div class="summary-sub">'+fmtK(totalV)+' de '+fmtK(totalM)+'</div></div>'+
+    '<div class="summary-card"><div class="summary-num" style="color:var(--blue)">'+wdGlobal.avanceMes+'%</div><div class="summary-lbl">Avance del mes</div><div class="summary-sub">'+wdGlobal.elapsed+' de '+wdGlobal.total+' días hábiles</div></div>'+
     '<div class="summary-card"><div class="summary-num">'+totalC+'</div><div class="summary-lbl">Total clientes</div></div>';
+
   var wrName='',wrPct=999,wrGrp='';
   for(var g2 in groups){var rts=getRoutes(groups[g2]);for(var rt in rts){var rs=groupStats(rts[rt]);if(rs.p<wrPct&&rs.mt>0){wrPct=rs.p;wrName=rt;wrGrp=g2;}}}
   var ah='';
@@ -536,17 +595,20 @@ function renderGroups(){
   var grid=document.getElementById('groups-grid');grid.innerHTML='';
   for(var g3 in groups){
     var s3=gStats[g3],col=GROUP_COLORS[g3]||'#0057b7',rts3=getRoutes(groups[g3]),rArr=[];
+    var wd3 = getWD(g3);
     for(var rt3 in rts3){var rs3=groupStats(rts3[rt3]);rArr.push({rt:rt3,p:rs3.p});}
     rArr.sort(function(a,b){return a.p-b.p;});
     var w3=rArr[0],p3=Math.min(s3.p,100);
+    var paceColor3 = colorForPace(s3.p, wd3.avanceMes);
     var card=document.createElement('div');
     card.className='group-card'+(g3===worstG&&hasVenta?' worst':'');
     card.style.cssText='--gc:'+col;
     card.innerHTML=
-      '<div class="group-top"><div><div class="group-name" style="color:'+col+'">'+g3+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">'+Object.keys(rts3).length+' rutas &middot; '+s3.n+' clientes</div></div><div class="group-badge" style="background:'+colorFor(s3.p)+'33;color:'+colorFor(s3.p)+'">'+s3.p+'%</div></div>'+
+      '<div class="group-top"><div><div class="group-name" style="color:'+col+'">'+g3+'</div><div style="font-size:12px;color:var(--text3);margin-top:3px">'+Object.keys(rts3).length+' rutas &middot; '+s3.n+' clientes</div></div><div class="group-badge" style="background:'+paceColor3+'33;color:'+paceColor3+'">'+s3.p+'%</div></div>'+
       '<div class="group-stats"><div class="gstat" style="background:#f0f7ff"><div class="gstat-val" style="color:var(--blue)">'+fmtK(s3.prom)+'</div><div class="gstat-lbl">Prom. 3 meses</div></div><div class="gstat"><div class="gstat-val">'+fmtK(s3.mt)+'</div><div class="gstat-lbl">Meta mensual</div></div><div class="gstat"><div class="gstat-val">'+fmtK(s3.vt)+'</div><div class="gstat-lbl">Venta acum.</div></div><div class="gstat"><div class="gstat-val" style="color:'+(s3.ok/s3.n>=.5?'var(--green)':'var(--red)')+'">'+s3.ok+'/'+s3.n+'</div><div class="gstat-lbl">En meta</div></div></div>'+
-      '<div class="pbar"><div class="pbar-fill" style="width:'+p3+'%;background:'+col+'"></div></div>'+
-      '<div class="pbar-labels"><span style="font-size:11px">'+fmtK(s3.mt-s3.vt)+' faltante</span><span class="pbar-pct" style="color:'+colorFor(s3.p)+'">'+s3.p+'%</span></div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Avance del mes: <strong style="color:var(--blue)">'+wd3.avanceMes+'%</strong> ('+wd3.elapsed+'/'+wd3.total+' días hábiles)</div>'+
+      '<div class="pbar"><div class="pbar-fill" style="width:'+p3+'%;background:'+paceColor3+'"></div></div>'+
+      '<div class="pbar-labels"><span style="font-size:11px">'+fmtK(s3.mt-s3.vt)+' faltante</span><span class="pbar-pct" style="color:'+paceColor3+'">'+s3.p+'%</span></div>'+
       '<div class="group-footer"><div class="group-worst-route">Ruta mas baja: <strong>'+w3.rt+'</strong> ('+w3.p+'%)</div><div class="group-cta">Ver rutas &#8250;</div></div>';
     (function(grp){card.onclick=function(){showRoutes(grp);};})(g3);
     grid.appendChild(card);
@@ -560,6 +622,7 @@ function renderGroups(){
 // ROUTES
 function showRoutes(g){
   curGroup=g;
+  var wd = getWD(g);
   var rts=getRoutes(getGroups()[g]),rStats=[];
   for(var rt in rts){var s=groupStats(rts[rt]);rStats.push({rt:rt,s:s,rr:rts[rt]});}
   rStats.sort(function(a,b){return a.s.p-b.s.p;});
@@ -573,7 +636,13 @@ function showRoutes(g){
     var btn=document.createElement('div');
     btn.className='route-btn'+(item.rt===worst.rt&&worst.s.p<70?' worst-route':'');
     var p=Math.min(item.s.p,100);
-    btn.innerHTML='<div class="route-name">'+item.rt+'</div><div class="route-sub">'+item.rr.length+' clientes</div><div class="route-pct-row"><div class="mini-pbar"><div class="mini-pbar-fill" style="width:'+p+'%;background:'+colorFor(item.s.p)+'"></div></div><span class="route-pct-num" style="color:'+colorFor(item.s.p)+'">'+item.s.p+'%</span></div><div style="font-size:11px;color:var(--text3);margin-top:5px">'+fmtK(item.s.mt)+'</div><div style="font-size:10px;color:var(--text3);margin-top:4px">Venta: <b>'+fmtK(item.s.vt)+'</b></div><div style="font-size:10px;color:var(--text3);margin-top:2px">Prom. 3m: <b style="color:var(--blue)">'+fmtK(item.s.prom)+'</b></div>';
+    var pColor = colorForPace(item.s.p, wd.avanceMes);
+    btn.innerHTML='<div class="route-name">'+item.rt+'</div><div class="route-sub">'+item.rr.length+' clientes</div>'+
+      '<div style="font-size:10px;color:var(--text3);margin-bottom:4px">Avance del mes: <strong style="color:var(--blue)">'+wd.avanceMes+'%</strong></div>'+
+      '<div class="route-pct-row"><div class="mini-pbar"><div class="mini-pbar-fill" style="width:'+p+'%;background:'+pColor+'"></div></div><span class="route-pct-num" style="color:'+pColor+'">'+item.s.p+'%</span></div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:5px">'+fmtK(item.s.mt)+'</div>'+
+      '<div style="font-size:10px;color:var(--text3);margin-top:4px">Venta: <b>'+fmtK(item.s.vt)+'</b></div>'+
+      '<div style="font-size:10px;color:var(--text3);margin-top:2px">Prom. 3m: <b style="color:var(--blue)">'+fmtK(item.s.prom)+'</b></div>';
     (function(grp,rt){btn.onclick=function(){showClients(grp,rt);};})(g,item.rt);
     grid.appendChild(btn);
   });
@@ -584,17 +653,21 @@ function showRoutes(g){
 }
 
 // CLIENTS
+var curGrupoWD = {avanceMes:0, elapsed:0, total:0};
 function showClients(g,rt){
   curRoute=rt;
+  curGrupoWD = getWD(g);
   var rows=getRoutes(getGroups()[g])[rt];
   var mt=0,vt=0,ok=0,ah=0;
   rows.forEach(function(r){var v=VMAP[r.cod]||{};mt+=r.meta_men;vt+=(v.venta||0);if((v.venta||0)>=r.meta_men&&r.meta_men>0)ok++;if((v.averias||0)>3.5)ah++;});
   var p=pct(vt,mt);
-  document.getElementById('route-header').innerHTML='<div><div class="rtitle">'+rt+'</div><div class="rsub">'+g+' &middot; '+rows.length+' clientes &middot; '+ok+' en meta</div></div><div class="route-badge" style="background:'+colorFor(p)+'33;color:'+colorFor(p)+'">'+p+'% avance</div>';
+  var pColor=colorForPace(p, curGrupoWD.avanceMes);
+  document.getElementById('route-header').innerHTML='<div><div class="rtitle">'+rt+'</div><div class="rsub">'+g+' &middot; '+rows.length+' clientes &middot; '+ok+' en meta</div></div><div class="route-badge" style="background:'+pColor+'33;color:'+pColor+'">'+p+'% avance</div>';
   document.getElementById('metrics-row').innerHTML=
     '<div class="metric"><div class="metric-val">'+fmtK(mt)+'</div><div class="metric-lbl">Meta mensual</div></div>'+
     '<div class="metric"><div class="metric-val">'+fmtK(vt)+'</div><div class="metric-lbl">Venta acumulada</div></div>'+
-    '<div class="metric"><div class="metric-val" style="color:'+colorFor(p)+'">'+p+'%</div><div class="metric-lbl">Cumplimiento</div></div>';
+    '<div class="metric"><div class="metric-val" style="color:'+pColor+'">'+p+'%</div><div class="metric-lbl">Cumplimiento</div></div>'+
+    '<div class="metric"><div class="metric-val" style="color:var(--blue)">'+curGrupoWD.avanceMes+'%</div><div class="metric-lbl">Avance del mes</div></div>';
   document.getElementById('client-alerts').innerHTML=ah>0
     ?'<div class="alert-banner warn"><div class="alert-icon">&#128680;</div><div class="alert-text"><strong>'+ah+' cliente(s) con averias mayores al 3.5%</strong>NO clasifican para la rifa aunque cumplan en ventas.</div></div>'
     :'<div class="alert-banner success"><div class="alert-icon">&#9989;</div><div class="alert-text"><strong>Sin alertas de averias</strong>Todos los clientes estan por debajo del 3.5%.</div></div>';
@@ -612,6 +685,7 @@ function showClients(g,rt){
 function renderClientRows(rows){
   var list=document.getElementById('clients-list');list.innerHTML='';
   if(!rows.length){list.innerHTML='<div class="no-results">&#128269; No se encontraron clientes.</div>';return;}
+  var avanceMes = curGrupoWD.avanceMes;
   rows.forEach(function(r){
     var v=VMAP[r.cod]||{},p2=pct(v.venta||0,r.meta_men),av=Number(v.averias||0),hi=av>3.5;
     var averHtml=hi?'<span class="aver-high">&#9888; '+av.toFixed(1)+'%</span>':'<span class="aver-ok">'+av.toFixed(1)+'%</span>';
@@ -622,7 +696,7 @@ function renderClientRows(rows){
       '<div class="c-cell"><span class="c-lbl">Meta Mensual</span><span class="c-num">'+fmtK(r.meta_men)+'</span></div>'+
       '<div class="c-cell"><span class="c-lbl">Venta Acum.</span><span class="c-num">'+fmtK(v.venta||0)+'</span></div>'+
       '<div class="c-cell"><span class="c-lbl">Averias %</span>'+averHtml+'</div>'+
-      '<div class="c-cell"><span class="c-lbl">Avance</span><span class="badge '+badgeCls(p2)+'">'+p2+'%</span></div>';
+      '<div class="c-cell"><span class="c-lbl">Avance</span><span class="badge '+badgeClsPace(p2, avanceMes)+'">'+p2+'%</span></div>';
     list.appendChild(row);
   });
 }
