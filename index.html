@@ -434,12 +434,12 @@ function getWD(grupo){
 // Semáforo: verde si cumplimiento >= avanceMes, amarillo si está hasta 10pts abajo, rojo si más de 10pts abajo
 function colorForPace(cumpl, avanceMes){
   if(cumpl >= avanceMes) return '#059669';           // verde
-  if(cumpl >= avanceMes - 10) return '#d97706';      // amarillo
+  if(cumpl >= avanceMes - 5) return '#d97706';       // amarillo
   return '#dc2626';                                   // rojo
 }
 function badgeClsPace(cumpl, avanceMes){
   if(cumpl >= avanceMes) return 'badge-ok';
-  if(cumpl >= avanceMes - 10) return 'badge-warn';
+  if(cumpl >= avanceMes - 5) return 'badge-warn';
   return 'badge-danger';
 }
 
@@ -580,7 +580,7 @@ function renderGroups(){
 
   document.getElementById('summary-row').innerHTML=
     '<div class="summary-card"><div class="summary-num" style="color:'+colorForPace(gp, wdGlobal.avanceMes)+'">'+gp+'%</div><div class="summary-lbl">Avance global</div><div class="summary-sub">'+fmtK(totalV)+' de '+fmtK(totalM)+'</div></div>'+
-    '<div class="summary-card"><div class="summary-num" style="color:var(--blue)">'+wdGlobal.avanceMes+'%</div><div class="summary-lbl">Avance del mes</div><div class="summary-sub">'+wdGlobal.elapsed+' de '+wdGlobal.total+' días hábiles</div></div>'+
+    '<div class="summary-card"><div class="summary-num" style="color:var(--blue)">'+wdGlobal.avanceMes+'%</div><div class="summary-lbl">Avance del mes</div></div>'+
     '<div class="summary-card"><div class="summary-num">'+totalC+'</div><div class="summary-lbl">Total clientes</div></div>';
 
   var wrName='',wrPct=999,wrGrp='';
