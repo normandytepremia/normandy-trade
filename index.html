@@ -180,6 +180,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* Logout btn */
 .logout-btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;margin-left:8px}
 .logout-btn:hover{background:rgba(255,255,255,.25)}
+@media(max-width:480px){
+  .topbar-admin-btn,.logout-btn{padding:0;font-size:0;border-radius:50%;width:30px;height:30px;display:none;align-items:center;justify-content:center;margin-left:5px;flex-shrink:0}
+  .topbar-admin-btn.visible{display:inline-flex}
+  .logout-btn{display:inline-flex}
+  .topbar-admin-btn::after{content:'⚙️';font-size:14px}
+  .logout-btn::after{content:'🚪';font-size:14px}
+  .topbar-sync{display:none}
+  .topbar-month{font-size:11px}
+}
 /* Admin pass manager */
 .pwd-manager{margin-top:20px}
 .pwd-manager-title{font-size:13px;font-weight:700;color:var(--blue);margin-bottom:12px}
@@ -281,9 +290,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
   <div class="login-box">
-    <div class="login-trophy">📅</div>
-    <div class="login-title">Normandy te premia<br>Foco Calendarios</div>
-    <div class="login-sub">Canal TR &middot; Trade<br>Ingresa tu usuario para ver tu avance</div>
+    <div class="login-trophy">🏆</div>
+    <div class="login-title">Copa Campeones<br>Normandy</div>
+    <div class="login-sub">Canal TR &middot; Campaña Mundial 2026<br>Ingresa tu usuario para ver tu avance</div>
     <div class="login-field">
       <label class="login-label">Tu grupo o ruta</label>
       <select class="login-select" id="login-user">
@@ -329,7 +338,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <label class="login-label">Contraseña</label>
       <input class="login-input" id="login-pwd" type="password" placeholder="Tu contraseña" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
-    <button class="login-btn" onclick="doLogin()"> Ver mi avance</button>
+    <button class="login-btn" onclick="doLogin()">⚽ Ver mi avance</button>
     <div class="login-err" id="login-err">Usuario o contraseña incorrectos.</div>
     <div class="login-version">Normandy Trade TR &mdash; 2026</div>
   </div>
@@ -374,6 +383,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <thead><tr><th>Rol</th><th>Usuario</th><th>Contraseña</th><th></th></tr></thead>
         <tbody id="pwd-tbody"></tbody>
       </table>
+      <div style="margin-top:16px">
+        <button onclick="downloadHTML()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px">&#11123; Descargar HTML con cambios</button>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px">Descarga el archivo con las contraseñas actualizadas y súbelo a GitHub para que todos vean los cambios.</div>
+      </div>
     </div>
   </div>
   <div id="page-seg">
@@ -592,6 +605,26 @@ function savePwd(uname){
   setTimeout(function(){ inp.style.borderColor=''; },1500);
 }
 
+function downloadHTML(){
+  var html = document.documentElement.outerHTML;
+  // Reconstruir bloque USERS con contraseñas actuales
+  var usersBlock = 'var USERS = {\n';
+  var entries = Object.keys(USERS).map(function(u){
+    return "  '"+u+"': {rol:'"+USERS[u].rol+"', pwd:'"+USERS[u].pwd+"'}";
+  });
+  usersBlock += entries.join(',\n') + '\n};';
+  var regex = /var USERS\s*=\s*\{[\s\S]*?\n\};/;
+  html = html.replace(regex, usersBlock);
+  var blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'index.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 function fmtK(n){ n=n||0; return new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(n); }
 function pct(a,b){ return b>0?Math.round(a/b*100):0; }
 
@@ -600,38 +633,44 @@ function pct(a,b){ return b>0?Math.round(a/b*100):0; }
 function calcWorkdays(grupo){
   var now = new Date();
   var y = now.getFullYear(), m = now.getMonth();
-  // Día vencido = ayer
-  var yesterday = new Date(y, m, now.getDate() - 1);
+  // Día vencido = ayer; si hoy es lunes, ayer es domingo → retroceder al viernes/sábado
   var isPrevent = (grupo||'').toString().toUpperCase().startsWith('P_');
-  function isWorkday(d){
-    var dow = d.getDay(); // 0=Dom,1=Lun,...,6=Sab
+  function isWorkday(dow){
     if(isPrevent) return dow>=1 && dow<=6; // Lun-Sab
-    return dow>=1 && dow<=5; // Lun-Vie
+    return dow>=1 && dow<=5;               // Lun-Vie
   }
+  // Buscar el último día hábil antes de hoy (día vencido)
+  var ref = new Date(y, m, now.getDate());
+  ref.setDate(ref.getDate()-1); // empezar desde ayer
+  while(!isWorkday(ref.getDay())){
+    ref.setDate(ref.getDate()-1); // retroceder hasta encontrar día hábil
+  }
+  // Si el día hábil encontrado es de otro mes, elapsed=0
+  var elapsed = 0;
+  var lastHabil = (ref.getMonth()===m) ? ref.getDate() : 0;
   // Total días hábiles del mes
   var totalDays = new Date(y, m+1, 0).getDate();
   var total = 0;
   for(var d=1; d<=totalDays; d++){
-    if(isWorkday(new Date(y,m,d))) total++;
+    var dow = new Date(y,m,d).getDay();
+    if(isWorkday(dow)) total++;
   }
-  // Días hábiles transcurridos hasta ayer (inclusive)
-  var elapsed = 0;
-  var lastDay = yesterday.getDate();
-  // Si ayer es del mes anterior, usar día 0
-  if(yesterday.getMonth() !== m) lastDay = 0;
-  for(var d2=1; d2<=lastDay; d2++){
-    if(isWorkday(new Date(y,m,d2))) elapsed++;
+  // Contar días hábiles transcurridos hasta lastHabil
+  for(var d2=1; d2<=lastHabil; d2++){
+    var dow2 = new Date(y,m,d2).getDay();
+    if(isWorkday(dow2)) elapsed++;
   }
   var avanceMes = total>0 ? Math.round(elapsed/total*100) : 0;
   return {total:total, elapsed:elapsed, avanceMes:avanceMes};
 }
 
-// Cache de avance del mes por grupo (calculado una vez)
+// Cache de avance del mes por grupo (se recalcula cada vez que se llama renderGroups)
 var WD_CACHE = {};
 function getWD(grupo){
   if(!WD_CACHE[grupo]) WD_CACHE[grupo] = calcWorkdays(grupo);
   return WD_CACHE[grupo];
 }
+function clearWDCache(){ WD_CACHE = {}; }
 
 // Semáforo: verde si cumplimiento >= avanceMes, amarillo si está hasta 10pts abajo, rojo si más de 10pts abajo
 function colorForPace(cumpl, avanceMes){
@@ -789,6 +828,7 @@ function getVisibleRoutes(routes){
 
 // GROUPS
 function renderGroups(){
+  clearWDCache();
   var groups=getGroups(),totalC=0,totalV=0,totalM=0,gStats={},worstG=null,worstGp=999;
   var visGroups=getVisibleGroups(groups);
   for(var g in visGroups){var s=groupStats(visGroups[g]);gStats[g]=s;totalC+=s.n;totalV+=s.vt;totalM+=s.mt;if(s.p<worstGp){worstGp=s.p;worstG=g;}}
